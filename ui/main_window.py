@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
-    QTableWidgetItem, QFrame, QListWidget
+    QTableWidgetItem, QFrame, QListWidget, QSizePolicy
 )
 from PyQt5.QtCore import QTimer
 import pyqtgraph as pg
@@ -27,9 +27,8 @@ class MainWindow(QWidget):
         super().__init__()
 
         self.setWindowTitle("💳 Fraud Analytics Pro")
-        self.setGeometry(100, 100, 1100, 600)
+        self.showMaximized()
 
-        # 🌌 Background
         self.setStyleSheet("""
             QWidget {
                 background-color: #0f172a;
@@ -38,22 +37,38 @@ class MainWindow(QWidget):
             }
         """)
 
-        # 🔥 MAIN LAYOUT
+        # KPI
+        self.fraud_total = 0
+        self.legit_total = 0
+
+        kpi_layout = QHBoxLayout()
+
+        self.fraud_card = QLabel("🚨 Fraud: 0")
+        self.legit_card = QLabel("✅ Legit: 0")
+        self.risk_card = QLabel("⚠️ Risk: 0%")
+
+        for card in [self.fraud_card, self.legit_card, self.risk_card]:
+            card.setFixedHeight(80)
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            card.setStyleSheet("""
+                background: rgba(255,255,255,0.12);
+                padding: 15px;
+                border-radius: 12px;
+                font-size: 18px;
+                font-weight: bold;
+            """)
+            kpi_layout.addWidget(card)
+
+        # MAIN
         main_layout = QHBoxLayout()
 
-        # =======================
-        # ✅ SIDEBAR (ADD HERE)
-        # =======================
         self.sidebar = QListWidget()
         self.sidebar.addItems(["📊 Dashboard", "💾 Export CSV", "❌ Exit"])
         self.sidebar.clicked.connect(self.handle_menu)
-        self.sidebar.setFixedWidth(160)
-
+        self.sidebar.setFixedWidth(140)
         main_layout.addWidget(self.sidebar)
 
-        # =======================
-        # 🔹 LEFT PANEL
-        # =======================
+        # LEFT
         left_panel = QVBoxLayout()
 
         self.table_card = GlassCard()
@@ -62,7 +77,24 @@ class MainWindow(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["Amount", "Hour", "Location", "Result"])
-        self.table.setStyleSheet("background: transparent;")
+
+        # 🔥 FIXED DARK TABLE
+        self.table.setStyleSheet("""
+            QTableWidget {
+                background-color: transparent;
+                color: white;
+                gridline-color: #2a2f45;
+            }
+            QTableWidget::item {
+                padding: 6px;
+            }
+            QTableWidget::item:selected {
+                background-color: #3b82f6;
+            }
+        """)
+        self.table.setAlternatingRowColors(False)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setStyleSheet("color: white;")
 
         table_layout.addWidget(QLabel("📋 Transactions"))
         table_layout.addWidget(self.table)
@@ -70,7 +102,7 @@ class MainWindow(QWidget):
         self.table_card.setLayout(table_layout)
         left_panel.addWidget(self.table_card)
 
-        # 🔹 ALERT CARD
+        # ALERT
         self.alert_card = GlassCard()
         alert_layout = QVBoxLayout()
 
@@ -85,39 +117,35 @@ class MainWindow(QWidget):
 
         main_layout.addLayout(left_panel)
 
-        # =======================
-        # 🔹 RIGHT PANEL (GRAPH)
-        # =======================
+        # RIGHT GRAPH
         right_panel = QVBoxLayout()
-
-        self.graph_card = GlassCard()
-        graph_layout = QVBoxLayout()
 
         self.graph = pg.PlotWidget()
         self.graph.setBackground(None)
+        self.graph.showGrid(x=True, y=True)
 
-        graph_layout.addWidget(QLabel("📊 Fraud Trend"))
-        graph_layout.addWidget(self.graph)
-
-        self.graph_card.setLayout(graph_layout)
-        right_panel.addWidget(self.graph_card)
+        right_panel.addWidget(QLabel("📊 Fraud Trend"))
+        right_panel.addWidget(self.graph)
 
         main_layout.addLayout(right_panel)
 
-        self.setLayout(main_layout)
+        # FINAL
+        container = QVBoxLayout()
+        container.addLayout(kpi_layout)
+        container.addLayout(main_layout)
+        container.setStretch(0, 1)
+        container.setStretch(1, 8)
 
-        # 📊 Graph data
+        self.setLayout(container)
+
         self.x = []
         self.y = []
+        self.curve = self.graph.plot(pen='r')
 
-        # ⏱ Timer
         self.timer = QTimer()
         self.timer.timeout.connect(self.run_transaction)
         self.timer.start(1000)
 
-    # =======================
-    # 🚨 TRANSACTION LOGIC
-    # =======================
     def run_transaction(self):
         txn = generate_transaction()
 
@@ -127,7 +155,6 @@ class MainWindow(QWidget):
             txn["location_change"]
         )
 
-        # Table update
         row = self.table.rowCount()
         self.table.insertRow(row)
 
@@ -136,39 +163,36 @@ class MainWindow(QWidget):
         self.table.setItem(row, 2, QTableWidgetItem(str(txn["location_change"])))
         self.table.setItem(row, 3, QTableWidgetItem(result))
 
-        # Alert update
         if "Fraud" in result:
+            self.fraud_total += 1
             self.alert_label.setText(f"🚨 Fraud: ₹{txn['amount']}")
-            self.alert_label.setStyleSheet("color: red; font-size: 16px;")
+            self.alert_label.setStyleSheet("color: red;")
         else:
+            self.legit_total += 1
             self.alert_label.setText("✅ System Normal")
-            self.alert_label.setStyleSheet("color: lightgreen; font-size: 16px;")
+            self.alert_label.setStyleSheet("color: lightgreen;")
 
-        # Graph update
+        total = self.fraud_total + self.legit_total
+        risk = (self.fraud_total / total) * 100 if total else 0
+
+        self.fraud_card.setText(f"🚨 Fraud: {self.fraud_total}")
+        self.legit_card.setText(f"✅ Legit: {self.legit_total}")
+        self.risk_card.setText(f"⚠️ Risk: {risk:.1f}%")
+
         self.x.append(len(self.x))
-        self.y.append(1 if "Fraud" in result else 0)
+        self.y.append(risk)
+        self.curve.setData(self.x, self.y)
 
-        self.graph.plot(self.x, self.y, clear=True, pen='r')
-
-    # =======================
-    # 📌 SIDEBAR HANDLER
-    # =======================
     def handle_menu(self, index):
         text = index.data()
-
         if "Export" in text:
             self.export_csv()
-
         elif "Exit" in text:
             self.close()
 
-    # =======================
-    # 💾 EXPORT CSV
-    # =======================
     def export_csv(self):
         with open("transactions.csv", "w", newline="") as file:
             writer = csv.writer(file)
-
             writer.writerow(["Amount", "Hour", "Location", "Result"])
 
             for row in range(self.table.rowCount()):
@@ -178,4 +202,4 @@ class MainWindow(QWidget):
                     data.append(item.text() if item else "")
                 writer.writerow(data)
 
-        self.alert_label.setText("✅ Exported to transactions.csv")
+        self.alert_label.setText("✅ Exported")
