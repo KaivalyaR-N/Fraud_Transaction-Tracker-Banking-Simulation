@@ -1,9 +1,10 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
-    QTableWidgetItem, QFrame
+    QTableWidgetItem, QFrame, QListWidget
 )
 from PyQt5.QtCore import QTimer
 import pyqtgraph as pg
+import csv
 
 from model.predict import predict_transaction
 from simulator.transaction_gen import generate_transaction
@@ -26,7 +27,7 @@ class MainWindow(QWidget):
         super().__init__()
 
         self.setWindowTitle("💳 Fraud Analytics Pro")
-        self.setGeometry(100, 100, 1000, 600)
+        self.setGeometry(100, 100, 1100, 600)
 
         # 🌌 Background
         self.setStyleSheet("""
@@ -37,9 +38,22 @@ class MainWindow(QWidget):
             }
         """)
 
+        # 🔥 MAIN LAYOUT
         main_layout = QHBoxLayout()
 
+        # =======================
+        # ✅ SIDEBAR (ADD HERE)
+        # =======================
+        self.sidebar = QListWidget()
+        self.sidebar.addItems(["📊 Dashboard", "💾 Export CSV", "❌ Exit"])
+        self.sidebar.clicked.connect(self.handle_menu)
+        self.sidebar.setFixedWidth(160)
+
+        main_layout.addWidget(self.sidebar)
+
+        # =======================
         # 🔹 LEFT PANEL
+        # =======================
         left_panel = QVBoxLayout()
 
         self.table_card = GlassCard()
@@ -71,7 +85,9 @@ class MainWindow(QWidget):
 
         main_layout.addLayout(left_panel)
 
+        # =======================
         # 🔹 RIGHT PANEL (GRAPH)
+        # =======================
         right_panel = QVBoxLayout()
 
         self.graph_card = GlassCard()
@@ -99,6 +115,9 @@ class MainWindow(QWidget):
         self.timer.timeout.connect(self.run_transaction)
         self.timer.start(1000)
 
+    # =======================
+    # 🚨 TRANSACTION LOGIC
+    # =======================
     def run_transaction(self):
         txn = generate_transaction()
 
@@ -130,3 +149,33 @@ class MainWindow(QWidget):
         self.y.append(1 if "Fraud" in result else 0)
 
         self.graph.plot(self.x, self.y, clear=True, pen='r')
+
+    # =======================
+    # 📌 SIDEBAR HANDLER
+    # =======================
+    def handle_menu(self, index):
+        text = index.data()
+
+        if "Export" in text:
+            self.export_csv()
+
+        elif "Exit" in text:
+            self.close()
+
+    # =======================
+    # 💾 EXPORT CSV
+    # =======================
+    def export_csv(self):
+        with open("transactions.csv", "w", newline="") as file:
+            writer = csv.writer(file)
+
+            writer.writerow(["Amount", "Hour", "Location", "Result"])
+
+            for row in range(self.table.rowCount()):
+                data = []
+                for col in range(4):
+                    item = self.table.item(row, col)
+                    data.append(item.text() if item else "")
+                writer.writerow(data)
+
+        self.alert_label.setText("✅ Exported to transactions.csv")
