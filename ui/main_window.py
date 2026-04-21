@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
-    QTableWidgetItem, QFrame, QListWidget, QSizePolicy
+    QTableWidgetItem, QFrame, QListWidget, QSizePolicy, QHeaderView
 )
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QColor
@@ -38,7 +38,6 @@ class MainWindow(QWidget):
             }
         """)
 
-        # KPI
         self.fraud_total = 0
         self.legit_total = 0
 
@@ -60,7 +59,6 @@ class MainWindow(QWidget):
             """)
             kpi_layout.addWidget(card)
 
-        # MAIN
         main_layout = QHBoxLayout()
 
         self.sidebar = QListWidget()
@@ -69,7 +67,6 @@ class MainWindow(QWidget):
         self.sidebar.setFixedWidth(140)
         main_layout.addWidget(self.sidebar)
 
-        # LEFT
         left_panel = QVBoxLayout()
 
         self.table_card = GlassCard()
@@ -79,27 +76,21 @@ class MainWindow(QWidget):
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["Amount", "Hour", "Location", "Result"])
 
-        # 🔥 DARK + HOVER FIX
+        # 🔥 CRITICAL FIX (visible columns)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+
         self.table.setStyleSheet("""
             QTableWidget {
                 background-color: transparent;
                 color: white;
-                gridline-color: #2a2f45;
-            }
-            QTableWidget::item {
-                padding: 6px;
             }
             QTableWidget::item:hover {
                 background-color: rgba(59,130,246,0.3);
             }
-            QTableWidget::item:selected {
-                background-color: #3b82f6;
-            }
         """)
 
-        self.table.setAlternatingRowColors(False)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setStyleSheet("color: white;")
 
         table_layout.addWidget(QLabel("📋 Transactions"))
         table_layout.addWidget(self.table)
@@ -107,12 +98,10 @@ class MainWindow(QWidget):
         self.table_card.setLayout(table_layout)
         left_panel.addWidget(self.table_card)
 
-        # ALERT
         self.alert_card = GlassCard()
         alert_layout = QVBoxLayout()
 
         self.alert_label = QLabel("🚨 No Alerts")
-        self.alert_label.setStyleSheet("font-size: 16px;")
 
         alert_layout.addWidget(QLabel("⚠️ Alerts"))
         alert_layout.addWidget(self.alert_label)
@@ -122,7 +111,6 @@ class MainWindow(QWidget):
 
         main_layout.addLayout(left_panel)
 
-        # RIGHT GRAPH
         right_panel = QVBoxLayout()
 
         self.graph = pg.PlotWidget()
@@ -134,12 +122,9 @@ class MainWindow(QWidget):
 
         main_layout.addLayout(right_panel)
 
-        # FINAL
         container = QVBoxLayout()
         container.addLayout(kpi_layout)
         container.addLayout(main_layout)
-        container.setStretch(0, 1)
-        container.setStretch(1, 8)
 
         self.setLayout(container)
 
@@ -153,12 +138,14 @@ class MainWindow(QWidget):
 
     def run_transaction(self):
         txn = generate_transaction()
-
         result = predict_transaction(
             txn["amount"],
             txn["hour"],
             txn["location_change"]
         )
+
+        # 🔥 SAFE RESULT
+        result_str = str(result)
 
         row = self.table.rowCount()
         self.table.insertRow(row)
@@ -168,19 +155,16 @@ class MainWindow(QWidget):
         loc_item = QTableWidgetItem(str(txn["location_change"]))
         result_item = QTableWidgetItem()
 
-        # 🔥 COLOR ROW
-        if "Fraud" in result:
+        if "Fraud" in result_str or result == 1:
             color = QColor(255, 0, 0, 80)
             result_item.setText("🚨 Fraud")
             self.fraud_total += 1
             self.alert_label.setText(f"🚨 Fraud: ₹{txn['amount']}")
-            self.alert_label.setStyleSheet("color: red;")
         else:
             color = QColor(0, 255, 0, 60)
             result_item.setText("✅ Legit")
             self.legit_total += 1
             self.alert_label.setText("✅ System Normal")
-            self.alert_label.setStyleSheet("color: lightgreen;")
 
         for item in [amount_item, hour_item, loc_item, result_item]:
             item.setBackground(color)
@@ -189,6 +173,9 @@ class MainWindow(QWidget):
         self.table.setItem(row, 1, hour_item)
         self.table.setItem(row, 2, loc_item)
         self.table.setItem(row, 3, result_item)
+
+        # 🔥 FORCE VISIBILITY
+        self.table.scrollToBottom()
 
         total = self.fraud_total + self.legit_total
         risk = (self.fraud_total / total) * 100 if total else 0
@@ -202,10 +189,9 @@ class MainWindow(QWidget):
         self.curve.setData(self.x, self.y)
 
     def handle_menu(self, index):
-        text = index.data()
-        if "Export" in text:
+        if "Export" in index.data():
             self.export_csv()
-        elif "Exit" in text:
+        elif "Exit" in index.data():
             self.close()
 
     def export_csv(self):
@@ -214,10 +200,10 @@ class MainWindow(QWidget):
             writer.writerow(["Amount", "Hour", "Location", "Result"])
 
             for row in range(self.table.rowCount()):
-                data = []
-                for col in range(4):
-                    item = self.table.item(row, col)
-                    data.append(item.text() if item else "")
-                writer.writerow(data)
+                writer.writerow([
+                    self.table.item(row, col).text()
+                    if self.table.item(row, col) else ""
+                    for col in range(4)
+                ])
 
         self.alert_label.setText("✅ Exported")

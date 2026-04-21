@@ -1,9 +1,17 @@
+import pickle
+import pandas as pd
+
+# 🔥 LOAD MODEL ONCE
+with open("model/saved_model.pkl", "rb") as f:
+    model = pickle.load(f)
+
+
 def predict_transaction(amount, hour, location_change):
-    data = [[amount, hour, location_change]]
-    result = model.predict(data)[0]
+    # convert into dataframe (important)
+    data = pd.DataFrame([[amount, hour, location_change]],
+                        columns=["amount", "hour", "location_change"])
 
-    # 🔥 rule override (real logic)
-    if amount > 20000 and location_change == 1:
-        return "🚨 Fraud"
+    prediction = model.predict(data)[0]
 
-    return "🚨 Fraud" if result == 1 else "✅ Legit"
+    # return clean label
+    return "Fraud" if prediction == 1 else "Legit"
