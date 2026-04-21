@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem, QFrame, QListWidget, QSizePolicy
 )
 from PyQt5.QtCore import QTimer
+from PyQt5.QtGui import QColor
 import pyqtgraph as pg
 import csv
 
@@ -78,7 +79,7 @@ class MainWindow(QWidget):
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["Amount", "Hour", "Location", "Result"])
 
-        # 🔥 FIXED DARK TABLE
+        # 🔥 DARK + HOVER FIX
         self.table.setStyleSheet("""
             QTableWidget {
                 background-color: transparent;
@@ -88,10 +89,14 @@ class MainWindow(QWidget):
             QTableWidget::item {
                 padding: 6px;
             }
+            QTableWidget::item:hover {
+                background-color: rgba(59,130,246,0.3);
+            }
             QTableWidget::item:selected {
                 background-color: #3b82f6;
             }
         """)
+
         self.table.setAlternatingRowColors(False)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setStyleSheet("color: white;")
@@ -158,19 +163,32 @@ class MainWindow(QWidget):
         row = self.table.rowCount()
         self.table.insertRow(row)
 
-        self.table.setItem(row, 0, QTableWidgetItem(f"₹{txn['amount']}"))
-        self.table.setItem(row, 1, QTableWidgetItem(str(txn["hour"])))
-        self.table.setItem(row, 2, QTableWidgetItem(str(txn["location_change"])))
-        self.table.setItem(row, 3, QTableWidgetItem(result))
+        amount_item = QTableWidgetItem(f"₹{txn['amount']}")
+        hour_item = QTableWidgetItem(str(txn["hour"]))
+        loc_item = QTableWidgetItem(str(txn["location_change"]))
+        result_item = QTableWidgetItem()
 
+        # 🔥 COLOR ROW
         if "Fraud" in result:
+            color = QColor(255, 0, 0, 80)
+            result_item.setText("🚨 Fraud")
             self.fraud_total += 1
             self.alert_label.setText(f"🚨 Fraud: ₹{txn['amount']}")
             self.alert_label.setStyleSheet("color: red;")
         else:
+            color = QColor(0, 255, 0, 60)
+            result_item.setText("✅ Legit")
             self.legit_total += 1
             self.alert_label.setText("✅ System Normal")
             self.alert_label.setStyleSheet("color: lightgreen;")
+
+        for item in [amount_item, hour_item, loc_item, result_item]:
+            item.setBackground(color)
+
+        self.table.setItem(row, 0, amount_item)
+        self.table.setItem(row, 1, hour_item)
+        self.table.setItem(row, 2, loc_item)
+        self.table.setItem(row, 3, result_item)
 
         total = self.fraud_total + self.legit_total
         risk = (self.fraud_total / total) * 100 if total else 0
