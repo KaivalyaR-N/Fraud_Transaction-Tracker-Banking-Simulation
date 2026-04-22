@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
-    QTableWidgetItem, QFrame, QListWidget, QSizePolicy, QHeaderView
+    QTableWidgetItem, QFrame, QListWidget, QHeaderView
 )
 from PyQt5.QtCore import QTimer, QUrl
 from PyQt5.QtGui import QColor
@@ -18,12 +18,13 @@ from simulator.transaction_gen import generate_transaction
 class GlassCard(QFrame):
     def __init__(self):
         super().__init__()
+
         self.setStyleSheet("""
-            QFrame {
-                background: rgba(255,255,255,0.05);
-                border-radius: 15px;
-                padding: 10px;
-            }
+        QFrame{
+            background: rgba(255,255,255,0.06);
+            border:1px solid rgba(255,255,255,0.10);
+            border-radius:22px;
+        }
         """)
 
 
@@ -31,303 +32,382 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("💳 Fraud Analytics Pro")
+        self.setWindowTitle("Fraud Analytics Pro")
         self.showMaximized()
 
         self.setStyleSheet("""
-            QWidget {
-                background-color: #0f172a;
-                color: white;
-                font-family: Arial;
-            }
+        QWidget{
+            background:qlineargradient(
+                x1:0,y1:0,x2:1,y2:1,
+                stop:0 #0F172A,
+                stop:1 #111827
+            );
+            color:#E5E7EB;
+            font-family:Segoe UI;
+        }
+
+        QLabel{
+            background:transparent;
+        }
         """)
 
-        # KPI
         self.fraud_total = 0
         self.legit_total = 0
+        self.anomaly_total = 0
 
-        kpi_layout = QHBoxLayout()
+        root = QHBoxLayout(self)
+        root.setContentsMargins(28,28,28,28)
+        root.setSpacing(24)
 
-        self.fraud_card = QLabel("🚨 Fraud: 0")
-        self.legit_card = QLabel("✅ Legit: 0")
-        self.risk_card = QLabel("⚠️ Risk: 0%")
-
-        for card in [self.fraud_card, self.legit_card, self.risk_card]:
-            card.setFixedHeight(80)
-            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            card.setStyleSheet("""
-                background: rgba(255,255,255,0.12);
-                padding: 15px;
-                border-radius: 12px;
-                font-size: 18px;
-                font-weight: bold;
-            """)
-            kpi_layout.addWidget(card)
-
-        # MAIN
-        main_layout = QHBoxLayout()
-
+        # -------- SIDEBAR --------
         self.sidebar = QListWidget()
-        self.sidebar.addItems(["📊 Dashboard", "💾 Export CSV", "❌ Exit"])
-        self.sidebar.clicked.connect(self.handle_menu)
-        self.sidebar.setFixedWidth(140)
+        self.sidebar.addItems([
+            "Dashboard",
+            "Export",
+            "Exit"
+        ])
 
-        main_layout.addWidget(self.sidebar)
+        self.sidebar.clicked.connect(
+            self.handle_menu
+        )
 
-        # LEFT
-        left_panel = QVBoxLayout()
+        self.sidebar.setFixedWidth(180)
 
-        self.table_card = GlassCard()
-        table_layout = QVBoxLayout()
+        self.sidebar.setStyleSheet("""
+        QListWidget{
+            background:rgba(255,255,255,0.05);
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:22px;
+            padding:14px;
+        }
+
+        QListWidget::item{
+            padding:14px;
+            margin:6px;
+            border-radius:12px;
+        }
+
+        QListWidget::item:selected{
+            background:rgba(255,255,255,0.08);
+        }
+        """)
+
+        root.addWidget(self.sidebar)
+
+        # -------- MAIN --------
+        main = QVBoxLayout()
+        main.setSpacing(22)
+
+        # KPI
+        kpi = QHBoxLayout()
+
+        self.kpi1 = GlassCard()
+        a = QVBoxLayout(self.kpi1)
+        a.addWidget(QLabel("Fraud Signals"))
+        self.fraud_label = QLabel("0")
+        self.fraud_label.setStyleSheet(
+            "font-size:30px;font-weight:700;"
+        )
+        a.addWidget(self.fraud_label)
+
+        self.kpi2 = GlassCard()
+        b = QVBoxLayout(self.kpi2)
+        b.addWidget(QLabel("Legitimate Flow"))
+        self.legit_label = QLabel("0")
+        self.legit_label.setStyleSheet(
+            "font-size:30px;font-weight:700;"
+        )
+        b.addWidget(self.legit_label)
+
+        self.kpi3 = GlassCard()
+        c = QVBoxLayout(self.kpi3)
+        c.addWidget(QLabel("Risk Index"))
+        self.risk_label = QLabel("0.0%")
+        self.risk_label.setStyleSheet(
+            "font-size:30px;font-weight:700;"
+        )
+        c.addWidget(self.risk_label)
+
+        kpi.addWidget(self.kpi1)
+        kpi.addWidget(self.kpi2)
+        kpi.addWidget(self.kpi3)
+
+        main.addLayout(kpi)
+
+        # -------- CONTENT --------
+        content = QHBoxLayout()
+
+        # TABLE
+        table_card = GlassCard()
+        twrap = QVBoxLayout(table_card)
+
+        twrap.addWidget(
+            QLabel("Live Transactions")
+        )
 
         self.table = QTableWidget()
         self.table.setColumnCount(4)
+
         self.table.setHorizontalHeaderLabels(
             ["Amount","Hour","Location","Result"]
         )
 
+        self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(42)
+
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Stretch)
+
+        header.setSectionResizeMode(
+            0,QHeaderView.Stretch
+        )
+
+        header.setSectionResizeMode(
+            1,QHeaderView.ResizeToContents
+        )
+
+        header.setSectionResizeMode(
+            2,QHeaderView.ResizeToContents
+        )
+
+        header.setSectionResizeMode(
+            3,QHeaderView.Stretch
+        )
 
         self.table.setStyleSheet("""
-            QTableWidget {
-                background-color: transparent;
-                color: white;
-                gridline-color: #2a2f45;
-            }
-            QTableWidget::item:hover {
-                background-color: rgba(59,130,246,0.30);
-            }
+        QTableWidget{
+            background:transparent;
+            border:none;
+            gridline-color:rgba(255,255,255,0.05);
+        }
+
+        QHeaderView::section{
+            background:rgba(255,255,255,0.08);
+            border:none;
+            padding:8px;
+        }
         """)
 
-        self.table.verticalHeader().setVisible(False)
+        twrap.addWidget(self.table)
 
-        table_layout.addWidget(QLabel("📋 Transactions"))
-        table_layout.addWidget(self.table)
+        content.addWidget(
+            table_card,3
+        )
 
-        self.table_card.setLayout(table_layout)
-        left_panel.addWidget(self.table_card)
+        # GRAPH
+        graph_card = GlassCard()
+        gwrap = QVBoxLayout(graph_card)
 
-        # ALERT
-        self.alert_card = GlassCard()
-        alert_layout = QVBoxLayout()
-
-        self.alert_label = QLabel("🚨 No Alerts")
-
-        alert_layout.addWidget(QLabel("⚠️ Alerts"))
-        alert_layout.addWidget(self.alert_label)
-
-        self.alert_card.setLayout(alert_layout)
-        left_panel.addWidget(self.alert_card)
-
-        main_layout.addLayout(left_panel)
-
-        # RIGHT GRAPH
-        right_panel = QVBoxLayout()
+        gwrap.addWidget(
+            QLabel("Risk Trend")
+        )
 
         self.graph = pg.PlotWidget()
+
         self.graph.setBackground(None)
-        self.graph.showGrid(x=True,y=True)
 
-        right_panel.addWidget(QLabel("📊 Risk + Amount Trends"))
-        right_panel.addWidget(self.graph)
-
-        main_layout.addLayout(right_panel)
-
-        # FINAL LAYOUT
-        container = QVBoxLayout()
-        container.addLayout(kpi_layout)
-        container.addLayout(main_layout)
-
-        self.setLayout(container)
-
-        # MULTI GRAPH DATA
-        self.x = []
-        self.risk_data = []
-        self.amount_data = []
-
-        self.risk_curve = self.graph.plot(
-            pen='r',
-            name="Risk"
+        self.graph.showGrid(
+            x=True,
+            y=True,
+            alpha=0.15
         )
 
-        self.amount_curve = self.graph.plot(
-            pen='b',
-            name="Amount"
+        self.graph.getPlotItem().hideAxis("top")
+        self.graph.getPlotItem().hideAxis("right")
+
+        self.curve = self.graph.plot(
+            pen=pg.mkPen(width=3)
         )
 
-        # SOUND
+        gwrap.addWidget(self.graph)
+
+        content.addWidget(
+            graph_card,2
+        )
+
+        main.addLayout(content)
+
+        root.addLayout(main,1)
+
+        self.x=[]
+        self.risk_series=[]
+
+        # -------- ALERT SOUND --------
         self.alert_sound = QSoundEffect()
-        sound_path = os.path.abspath("alert.wav")
-        self.alert_sound.setSource(
-            QUrl.fromLocalFile(sound_path)
+
+        sound_path = os.path.abspath(
+            "alert.wav"
         )
+
+        self.alert_sound.setSource(
+            QUrl.fromLocalFile(
+                sound_path
+            )
+        )
+
         self.alert_sound.setVolume(0.8)
 
         # TIMER
         self.timer = QTimer()
-        self.timer.timeout.connect(self.run_transaction)
-        self.timer.start(1000)
+        self.timer.timeout.connect(
+            self.run_transaction
+        )
+        self.timer.start(1200)
 
 
+    # -------- LIVE LOOP --------
     def run_transaction(self):
 
         txn = generate_transaction()
 
-        result = predict_transaction(
-            txn["amount"],
-            txn["hour"],
-            txn["location_change"]
+        result = str(
+            predict_transaction(
+                txn["amount"],
+                txn["hour"],
+                txn["location_change"]
+            )
         )
 
-        # 🧠 anomaly detection
         is_anomaly = detect_anomaly(
             txn["amount"],
             txn["hour"],
             txn["location_change"]
         )
 
-        result_str = str(result)
-
         row = self.table.rowCount()
+
         self.table.insertRow(row)
 
-        amount_item = QTableWidgetItem(
-            f"₹{txn['amount']}"
-        )
+        status="Legit"
+        tint=QColor(0,255,0,30)
 
-        hour_item = QTableWidgetItem(
-            str(txn["hour"])
-        )
+        if is_anomaly:
 
-        loc_item = QTableWidgetItem(
-            str(txn["location_change"])
-        )
+            status="Anomaly"
 
-        result_item = QTableWidgetItem()
+            tint=QColor(
+                255,180,0,45
+            )
 
-        # FRAUD / ANOMALY
-        if is_anomaly or "Fraud" in result_str or result == 1:
+            self.anomaly_total += 1
 
-            color = QColor(255,0,0,80)
+            if not self.alert_sound.isPlaying():
+                self.alert_sound.play()
 
-            if is_anomaly:
-                result_item.setText("⚠️ Anomaly")
-                self.alert_label.setText(
-                    "⚠️ Anomaly Detected!"
-                )
-            else:
-                result_item.setText("🚨 Fraud")
-                self.alert_label.setText(
-                    f"🚨 Fraud: ₹{txn['amount']}"
-                )
+
+        elif "Fraud" in result:
+
+            status="Fraud"
+
+            tint=QColor(
+                255,0,0,40
+            )
 
             self.fraud_total += 1
 
             if not self.alert_sound.isPlaying():
                 self.alert_sound.play()
 
+
         else:
-
-            color = QColor(0,255,0,60)
-
-            result_item.setText("✅ Legit")
 
             self.legit_total += 1
 
-            self.alert_label.setText(
-                "✅ System Normal"
+
+        vals = [
+            f"₹{txn['amount']}",
+            str(txn["hour"]),
+            str(txn["location_change"]),
+            status
+        ]
+
+        for c,v in enumerate(vals):
+
+            item = QTableWidgetItem(v)
+
+            item.setBackground(tint)
+
+            self.table.setItem(
+                row,c,item
             )
-
-        for item in [
-            amount_item,
-            hour_item,
-            loc_item,
-            result_item
-        ]:
-            item.setBackground(color)
-
-        self.table.setItem(row,0,amount_item)
-        self.table.setItem(row,1,hour_item)
-        self.table.setItem(row,2,loc_item)
-        self.table.setItem(row,3,result_item)
 
         self.table.scrollToBottom()
 
-        # KPI
-        total = self.fraud_total + self.legit_total
+        total = (
+            self.fraud_total +
+            self.legit_total +
+            self.anomaly_total
+        )
 
         risk = (
-            self.fraud_total / total * 100
+            self.fraud_total/total*100
             if total else 0
         )
 
-        self.fraud_card.setText(
-            f"🚨 Fraud: {self.fraud_total}"
+        self.fraud_label.setText(
+            str(self.fraud_total)
         )
 
-        self.legit_card.setText(
-            f"✅ Legit: {self.legit_total}"
+        self.legit_label.setText(
+            str(self.legit_total)
         )
 
-        self.risk_card.setText(
-            f"⚠️ Risk: {risk:.1f}%"
+        self.risk_label.setText(
+            f"{risk:.1f}%"
         )
 
-        # MULTI GRAPH UPDATE
-        self.x.append(len(self.x))
-
-        self.risk_data.append(risk)
-
-        scaled_amount = txn["amount"]/1000
-        self.amount_data.append(
-            scaled_amount
+        self.x.append(
+            len(self.x)
         )
 
-        self.risk_curve.setData(
+        self.risk_series.append(
+            risk
+        )
+
+        self.curve.setData(
             self.x,
-            self.risk_data
-        )
-
-        self.amount_curve.setData(
-            self.x,
-            self.amount_data
+            self.risk_series
         )
 
 
+    # -------- MENU --------
     def handle_menu(self,index):
 
-        if "Export" in index.data():
-            self.export_csv()
+        txt = index.data()
 
-        elif "Exit" in index.data():
+        if "Exit" in txt:
             self.close()
 
+        elif "Export" in txt:
+            self.export_csv()
 
+
+    # -------- EXPORT --------
     def export_csv(self):
 
         with open(
             "transactions.csv",
             "w",
             newline=""
-        ) as file:
+        ) as f:
 
-            writer = csv.writer(file)
+            w = csv.writer(f)
 
-            writer.writerow(
-                ["Amount","Hour","Location","Result"]
-            )
+            w.writerow([
+                "Amount",
+                "Hour",
+                "Location",
+                "Result"
+            ])
 
-            for row in range(
+            for r in range(
                 self.table.rowCount()
             ):
-                writer.writerow([
-                    self.table.item(row,col).text()
-                    if self.table.item(row,col)
+
+                w.writerow([
+                    self.table.item(r,c).text()
+                    if self.table.item(r,c)
                     else ""
-                    for col in range(4)
+                    for c in range(4)
                 ])
 
-        self.alert_label.setText(
-            "✅ Exported"
-        )
+        print("Exported.")
