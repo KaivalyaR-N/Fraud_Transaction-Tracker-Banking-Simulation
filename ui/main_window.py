@@ -11,6 +11,7 @@ import csv
 import os
 
 from model.predict import predict_transaction
+from model.anomaly import detect_anomaly
 from simulator.transaction_gen import generate_transaction
 
 
@@ -41,9 +42,7 @@ class MainWindow(QWidget):
             }
         """)
 
-        # ======================
         # KPI
-        # ======================
         self.fraud_total = 0
         self.legit_total = 0
 
@@ -65,9 +64,7 @@ class MainWindow(QWidget):
             """)
             kpi_layout.addWidget(card)
 
-        # ======================
         # MAIN
-        # ======================
         main_layout = QHBoxLayout()
 
         self.sidebar = QListWidget()
@@ -86,7 +83,7 @@ class MainWindow(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(
-            ["Amount", "Hour", "Location", "Result"]
+            ["Amount","Hour","Location","Result"]
         )
 
         header = self.table.horizontalHeader()
@@ -98,17 +95,8 @@ class MainWindow(QWidget):
                 color: white;
                 gridline-color: #2a2f45;
             }
-
-            QTableWidget::item {
-                padding: 6px;
-            }
-
             QTableWidget::item:hover {
                 background-color: rgba(59,130,246,0.30);
-            }
-
-            QTableWidget::item:selected {
-                background-color: #3b82f6;
             }
         """)
 
@@ -120,9 +108,8 @@ class MainWindow(QWidget):
         self.table_card.setLayout(table_layout)
         left_panel.addWidget(self.table_card)
 
-        # ALERT CARD
+        # ALERT
         self.alert_card = GlassCard()
-
         alert_layout = QVBoxLayout()
 
         self.alert_label = QLabel("🚨 No Alerts")
@@ -131,7 +118,6 @@ class MainWindow(QWidget):
         alert_layout.addWidget(self.alert_label)
 
         self.alert_card.setLayout(alert_layout)
-
         left_panel.addWidget(self.alert_card)
 
         main_layout.addLayout(left_panel)
@@ -141,9 +127,9 @@ class MainWindow(QWidget):
 
         self.graph = pg.PlotWidget()
         self.graph.setBackground(None)
-        self.graph.showGrid(x=True, y=True)
+        self.graph.showGrid(x=True,y=True)
 
-        right_panel.addWidget(QLabel("📊 Fraud Trend"))
+        right_panel.addWidget(QLabel("📊 Risk + Amount Trends"))
         right_panel.addWidget(self.graph)
 
         main_layout.addLayout(right_panel)
@@ -153,35 +139,37 @@ class MainWindow(QWidget):
         container.addLayout(kpi_layout)
         container.addLayout(main_layout)
 
-        container.setStretch(0, 1)
-        container.setStretch(1, 8)
-
         self.setLayout(container)
 
-        # Graph data
+        # MULTI GRAPH DATA
         self.x = []
-        self.y = []
+        self.risk_data = []
+        self.amount_data = []
 
-        self.curve = self.graph.plot(pen='r')
+        self.risk_curve = self.graph.plot(
+            pen='r',
+            name="Risk"
+        )
 
-        # ======================
-        # 🔊 SOUND SETUP
-        # ======================
+        self.amount_curve = self.graph.plot(
+            pen='b',
+            name="Amount"
+        )
+
+        # SOUND
         self.alert_sound = QSoundEffect()
-
         sound_path = os.path.abspath("alert.wav")
-        self.alert_sound.setSource(QUrl.fromLocalFile(sound_path))
-
+        self.alert_sound.setSource(
+            QUrl.fromLocalFile(sound_path)
+        )
         self.alert_sound.setVolume(0.8)
 
-        # Timer
+        # TIMER
         self.timer = QTimer()
         self.timer.timeout.connect(self.run_transaction)
         self.timer.start(1000)
 
-    # ======================
-    # TRANSACTION LOOP
-    # ======================
+
     def run_transaction(self):
 
         txn = generate_transaction()
@@ -192,32 +180,50 @@ class MainWindow(QWidget):
             txn["location_change"]
         )
 
+        # 🧠 anomaly detection
+        is_anomaly = detect_anomaly(
+            txn["amount"],
+            txn["hour"],
+            txn["location_change"]
+        )
+
         result_str = str(result)
 
         row = self.table.rowCount()
-
         self.table.insertRow(row)
 
-        amount_item = QTableWidgetItem(f"₹{txn['amount']}")
-        hour_item = QTableWidgetItem(str(txn["hour"]))
-        loc_item = QTableWidgetItem(str(txn["location_change"]))
+        amount_item = QTableWidgetItem(
+            f"₹{txn['amount']}"
+        )
+
+        hour_item = QTableWidgetItem(
+            str(txn["hour"])
+        )
+
+        loc_item = QTableWidgetItem(
+            str(txn["location_change"])
+        )
 
         result_item = QTableWidgetItem()
 
-        # Fraud / Legit
-        if "Fraud" in result_str or result == 1:
+        # FRAUD / ANOMALY
+        if is_anomaly or "Fraud" in result_str or result == 1:
 
             color = QColor(255,0,0,80)
 
-            result_item.setText("🚨 Fraud")
+            if is_anomaly:
+                result_item.setText("⚠️ Anomaly")
+                self.alert_label.setText(
+                    "⚠️ Anomaly Detected!"
+                )
+            else:
+                result_item.setText("🚨 Fraud")
+                self.alert_label.setText(
+                    f"🚨 Fraud: ₹{txn['amount']}"
+                )
 
             self.fraud_total += 1
 
-            self.alert_label.setText(
-                f"🚨 Fraud: ₹{txn['amount']}"
-            )
-
-            # 🔊 Play sound once
             if not self.alert_sound.isPlaying():
                 self.alert_sound.play()
 
@@ -233,7 +239,6 @@ class MainWindow(QWidget):
                 "✅ System Normal"
             )
 
-        # Row coloring
         for item in [
             amount_item,
             hour_item,
@@ -249,7 +254,7 @@ class MainWindow(QWidget):
 
         self.table.scrollToBottom()
 
-        # KPI update
+        # KPI
         total = self.fraud_total + self.legit_total
 
         risk = (
@@ -269,16 +274,28 @@ class MainWindow(QWidget):
             f"⚠️ Risk: {risk:.1f}%"
         )
 
-        # Graph update
+        # MULTI GRAPH UPDATE
         self.x.append(len(self.x))
-        self.y.append(risk)
 
-        self.curve.setData(
-            self.x,
-            self.y
+        self.risk_data.append(risk)
+
+        scaled_amount = txn["amount"]/1000
+        self.amount_data.append(
+            scaled_amount
         )
 
-    def handle_menu(self, index):
+        self.risk_curve.setData(
+            self.x,
+            self.risk_data
+        )
+
+        self.amount_curve.setData(
+            self.x,
+            self.amount_data
+        )
+
+
+    def handle_menu(self,index):
 
         if "Export" in index.data():
             self.export_csv()
@@ -304,7 +321,6 @@ class MainWindow(QWidget):
             for row in range(
                 self.table.rowCount()
             ):
-
                 writer.writerow([
                     self.table.item(row,col).text()
                     if self.table.item(row,col)
