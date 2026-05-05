@@ -53,6 +53,7 @@ cd fraud-transaction-tracker
 ```
 
 2. Create virtual environment:
+   Create only if needed to avoid conflicts
 
 ```bash
 python -m venv venv
