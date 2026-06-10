@@ -1,8 +1,14 @@
 import pickle
 import pandas as pd
 
-# 🔥 LOAD MODEL ONCE
-with open("model/saved_model.pkl", "rb") as f:
+import os
+
+MODEL_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "saved_model.pkl"
+)
+
+with open(MODEL_PATH, "rb") as f:
     model = pickle.load(f)
 
 
